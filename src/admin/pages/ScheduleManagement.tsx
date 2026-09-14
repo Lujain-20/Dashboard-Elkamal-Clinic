@@ -1,138 +1,95 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { getDoctors } from '../services/doctorAdminService';
 import { getDoctorSlots, createSlot, deleteSlot } from '../services/schedleAdminService';
 import type { WeeklyAvailability, Doctor } from '../types/adminTypes';
 import { DayOfWeek } from '../types/adminTypes';
-import { useAbortController } from '../hooks/useAbortController';
-import { useConfirm } from '../hooks/useConfirm';
-import { getApiErrorMessage, isAbortError } from '../utils/apiError';
 
 const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
 
 export default function ScheduleManagement() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [slots, setSlots] = useState<WeeklyAvailability[]>([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ dayOfWeek: DayOfWeek.Sunday, startTime: '09:00', endTime: '10:00' });
 
-  const getListSignal = useAbortController();
-  const getActionSignal = useAbortController();
-  const { confirm, ConfirmDialogElement } = useConfirm();
+  function loadSlots(doctorId: string) {
+    setLoading(true);
+    getDoctorSlots(doctorId)
+      .then(setSlots)
+      .finally(() => setLoading(false));
+  }
 
   useEffect(() => {
     getDoctors().then((list) => {
       setDoctors(list);
       if (list.length) setSelectedDoctorId(list[0].id);
-    }).catch(() => {});
+    });
   }, []);
 
-  const loadSlots = useCallback(() => {
+  useEffect(() => {
     if (!selectedDoctorId) return;
-    const signal = getListSignal();
-    setSlotsLoading(true);
-    setError(null);
-    getDoctorSlots(selectedDoctorId, signal)
-      .then((data) => { if (!signal.aborted) setSlots(data); })
-      .catch((err) => {
-        if (isAbortError(err)) return;
-        setError(getApiErrorMessage(err, 'تعذر تحميل المواعيد'));
-      })
-      .finally(() => { if (!signal.aborted) setSlotsLoading(false); });
-  }, [selectedDoctorId, getListSignal]);
-
-  useEffect(() => { loadSlots(); }, [loadSlots]);
+    loadSlots(selectedDoctorId);
+  }, [selectedDoctorId]);
 
   async function handleAddSlot(e: FormEvent) {
     e.preventDefault();
-    setError(null);
 
-    const startMinutes = timeToMinutes(form.startTime);
-    const endMinutes = timeToMinutes(form.endTime);
+    const newStart = form.startTime + ':00';
+    const newEnd = form.endTime + ':00';
 
-    if (endMinutes <= startMinutes) {
-      setError('وقت النهاية لازم يكون بعد وقت البداية');
+    if (newStart >= newEnd) {
+      alert('وقت البداية لازم يكون قبل وقت النهاية.');
       return;
     }
 
+    // بيتحقق من أي تداخل مع مواعيد موجودة في نفس اليوم
+    // (مش بس التطابق الكامل، أي جزء متداخل بيتحسب تعارض)
     const hasOverlap = slots.some((s) => {
       if (s.dayOfWeek !== form.dayOfWeek) return false;
-      const sStart = timeToMinutes(s.startTime.slice(0, 5));
-      const sEnd = timeToMinutes(s.endTime.slice(0, 5));
-      return startMinutes < sEnd && endMinutes > sStart;
+      return newStart < s.endTime && s.startTime < newEnd;
     });
 
     if (hasOverlap) {
-      setError('في تعارض مع موعد متاح بالفعل في نفس اليوم');
+      alert('الموعد ده بيتعارض مع موعد موجود بالفعل في نفس اليوم. راجعي المواعيد الحالية تحت.');
       return;
     }
 
-    setSaving(true);
-    const signal = getActionSignal();
+    setAdding(true);
     try {
-      await createSlot(
-        selectedDoctorId,
-        {
-          dayOfWeek: form.dayOfWeek,
-          startTime: form.startTime + ':00',
-          endTime: form.endTime + ':00',
-        },
-        signal
-      );
-      loadSlots();
-      setForm({ dayOfWeek: form.dayOfWeek, startTime: '09:00', endTime: '10:00' });
-    } catch (err) {
-      if (isAbortError(err)) return;
-      setError(getApiErrorMessage(err, 'حدث خطأ أثناء إضافة الموعد'));
+      await createSlot(selectedDoctorId, {
+        dayOfWeek: form.dayOfWeek,
+        startTime: newStart,
+        endTime: newEnd,
+      });
+      loadSlots(selectedDoctorId);
+    } catch {
+      alert('حدث خطأ أثناء إضافة الموعد');
     } finally {
-      setSaving(false);
+      setAdding(false);
     }
   }
 
   async function handleDelete(id: string) {
-    const ok = await confirm('هل تريد حذف هذا الموعد المتاح؟', {
-      title: 'حذف موعد',
-      confirmLabel: 'حذف',
-      danger: true,
-    });
-    if (!ok) return;
-
-    setDeletingId(id);
-    setError(null);
-    const signal = getActionSignal();
-    try {
-      await deleteSlot(id, signal);
-      loadSlots();
-    } catch (err) {
-      if (isAbortError(err)) return;
-      setError(getApiErrorMessage(err, 'تعذر حذف الموعد'));
-    } finally {
-      setDeletingId(null);
-    }
+    if (!confirm('حذف هذا الموعد؟')) return;
+    await deleteSlot(id);
+    setSlots((prev) => prev.filter((s) => s.id !== id));
   }
+
+  const sortedSlots = [...slots].sort((a, b) => {
+    if (a.dayOfWeek !== b.dayOfWeek) return a.dayOfWeek - b.dayOfWeek;
+    return a.startTime.localeCompare(b.startTime);
+  });
 
   return (
     <div>
       <h2>إدارة المواعيد المتاحة</h2>
 
-      {error && <div className="admin-alert admin-alert--error">{error}</div>}
-
       <div className="admin-form-field" style={{ maxWidth: 320, marginBottom: 20 }}>
         <label>اختر الدكتور</label>
-        <select
-          className="admin-select"
-          value={selectedDoctorId}
-          onChange={(e) => setSelectedDoctorId(e.target.value)}
-        >
+        <select className="admin-select" value={selectedDoctorId} onChange={(e) => setSelectedDoctorId(e.target.value)}>
           {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
       </div>
@@ -141,58 +98,47 @@ export default function ScheduleManagement() {
         <div className="admin-form-grid">
           <div className="admin-form-field">
             <label>اليوم</label>
-            <select
-              className="admin-select"
-              value={form.dayOfWeek}
-              onChange={(e) => setForm((f) => ({ ...f, dayOfWeek: Number(e.target.value) }))}
-            >
+            <select className="admin-select" value={form.dayOfWeek}
+              onChange={(e) => setForm((f) => ({ ...f, dayOfWeek: Number(e.target.value) }))}>
               {days.map((d, i) => <option key={i} value={i}>{d}</option>)}
             </select>
           </div>
           <div className="admin-form-field">
             <label>من الساعة</label>
-            <input
-              className="admin-input"
-              type="time"
-              value={form.startTime}
-              onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))}
-            />
+            <input className="admin-input" type="time" value={form.startTime}
+              onChange={(e) => setForm((f) => ({ ...f, startTime: e.target.value }))} />
           </div>
           <div className="admin-form-field">
             <label>إلى الساعة</label>
-            <input
-              className="admin-input"
-              type="time"
-              value={form.endTime}
-              onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))}
-            />
+            <input className="admin-input" type="time" value={form.endTime}
+              onChange={(e) => setForm((f) => ({ ...f, endTime: e.target.value }))} />
           </div>
         </div>
-        <button className="admin-btn admin-btn--gold" type="submit" disabled={saving} style={{ marginTop: 16 }}>
-          {saving ? 'جاري الإضافة...' : 'إضافة موعد'}
+        <button className="admin-btn admin-btn--gold" type="submit" disabled={adding} style={{ marginTop: 16 }}>
+          {adding ? 'جاري الإضافة...' : 'إضافة موعد'}
         </button>
       </form>
 
-      <div className="admin-slots-list">
-        {slotsLoading && <p>جاري التحميل...</p>}
-        {!slotsLoading && slots.length === 0 && <p>لا توجد مواعيد متاحة لهذا الدكتور</p>}
-        {!slotsLoading && slots.map((s) => (
-          <div key={s.id} className="admin-slot-row">
-            <strong style={{ width: 90 }}>{days[s.dayOfWeek]}</strong>
-            <span>{s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}</span>
-            <span style={{ flex: 1 }} />
-            <button
-              className="admin-btn admin-btn--sm admin-btn--danger"
-              disabled={deletingId === s.id}
-              onClick={() => handleDelete(s.id)}
-            >
-              {deletingId === s.id ? '...' : 'حذف'}
-            </button>
-          </div>
-        ))}
-      </div>
+      {loading && <p>جاري تحميل المواعيد...</p>}
 
-      {ConfirmDialogElement}
+      {!loading && sortedSlots.length === 0 && (
+        <p style={{ color: 'var(--admin-text-muted)', fontSize: 13 }}>
+          مفيش مواعيد أسبوعية مسجلة لهذا الدكتور لسه.
+        </p>
+      )}
+
+      {!loading && sortedSlots.length > 0 && (
+        <div className="admin-slots-list">
+          {sortedSlots.map((s) => (
+            <div key={s.id} className="admin-slot-row">
+              <strong style={{ width: 90 }}>{days[s.dayOfWeek]}</strong>
+              <span>{s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)}</span>
+              <span style={{ flex: 1 }} />
+              <button className="admin-btn admin-btn--sm admin-btn--danger" onClick={() => handleDelete(s.id)}>حذف</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
