@@ -9,6 +9,7 @@ export interface Appointment {
   appointmentType?: string;
   scheduledAt: string;
   status: AppointmentStatus;
+  patientPhoneNumber: string;
 }
 
 export interface Doctor {

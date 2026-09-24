@@ -117,13 +117,20 @@ export default function AppointmentsManagement() {
               const isActing = actingId === a.id;
               return (
                 <tr key={a.id}>
-                  <td>{a.patientName}</td>
-                  <td>{a.doctorName || '-'}</td>
-                  <td>{new Date(a.scheduledAt).toLocaleString('ar-EG')}</td>
-                  <td>{a.appointmentType || '-'}</td>
-                  <td><StatusBadge status={a.status} /></td>
+                  <td data-label="المريض">
+                    <div>
+                      <div>{a.patientName}</div>
+                      <div dir="ltr" style={{ fontSize: 12, opacity: 0.7, textAlign: 'right' }}>
+                        {a.patientPhoneNumber || '-'}
+                      </div>
+                    </div>
+                  </td>
+                  <td data-label="الدكتور">{a.doctorName || '-'}</td>
+                  <td data-label="الموعد">{new Date(a.scheduledAt).toLocaleString('ar-EG')}</td>
+                  <td data-label="نوع الحجز">{a.appointmentType || '-'}</td>
+                  <td data-label="الحالة"><StatusBadge status={a.status} /></td>
                   <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
                       <button
                         className="admin-btn admin-btn--sm admin-btn--success"
                         disabled={isActing || a.status === 'Confirmed'}

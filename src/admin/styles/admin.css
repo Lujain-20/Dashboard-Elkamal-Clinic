@@ -152,7 +152,7 @@ body {
   box-shadow: var(--admin-shadow-sm);
 }
 
-/* Off-canvas controls (mobile) — toggle .admin-sidebar--open via JS */
+/* Off-canvas controls (mobile) — toggled from AdminLayout.tsx */
 .admin-menu-toggle { display: none; }
 .admin-sidebar-overlay { display: none; }
 
@@ -256,6 +256,7 @@ body {
   border-radius: var(--admin-radius);
   border: 1px solid var(--admin-border);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--admin-shadow-sm);
 }
 .admin-table { width: 100%; border-collapse: collapse; min-width: 640px; }
@@ -301,6 +302,14 @@ body {
    Filters / Forms
    ========================================================= */
 .admin-filters { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
+
+/* كل فلتر ياخد مساحة معقولة جنب التاني بدل ما ينزل سطر لوحده */
+.admin-filters .admin-select,
+.admin-filters .admin-input {
+  flex: 1 1 160px;
+  max-width: 280px;
+  min-width: 0;
+}
 
 .admin-input, .admin-select, .admin-textarea {
   border: 1px solid var(--admin-border);
@@ -447,6 +456,7 @@ body {
 
 /* Mobile: off-canvas sidebar + stacked layout */
 @media (max-width: 768px) {
+  /* زرار القائمة ☰ (ثابت فوق يمين الشاشة) */
   .admin-menu-toggle {
     display: inline-flex;
     align-items: center;
@@ -459,17 +469,23 @@ body {
     cursor: pointer;
     font-size: 18px;
     color: var(--admin-text);
+    position: fixed;
+    top: 12px;
+    inset-inline-start: 16px;
+    z-index: 31;
   }
 
+  /* الـ sidebar: مخفي برا الشاشة على اليمين، ويدخل لما القائمة تتفتح */
   .admin-sidebar {
     position: fixed;
-    inset-inline-end: 0;
+    inset-inline-start: 0;
     top: 0;
     height: 100vh;
     width: min(80vw, 280px);
     transform: translateX(100%);
     box-shadow: var(--admin-shadow-lg);
   }
+  .admin-shell--menu-open .admin-sidebar,
   .admin-sidebar--open { transform: translateX(0); }
 
   .admin-sidebar-overlay {
@@ -481,14 +497,26 @@ body {
   }
   .admin-sidebar-overlay--visible { display: block; }
 
-  .admin-topbar { padding: 0 var(--space-4); gap: var(--space-2); }
+  /* سيبي مكان لزرار القائمة على اليمين */
+  .admin-topbar {
+    padding: 0 var(--space-4);
+    padding-inline-start: 64px;
+    gap: var(--space-2);
+  }
   .admin-topbar__name { display: none; }
 
   .admin-content { padding: var(--space-3); }
+  .admin-content h2 { font-size: 1.15rem; }
 
   .admin-cards-row { grid-template-columns: 1fr 1fr; gap: var(--space-3); }
   .admin-card { padding: var(--space-4); }
   .admin-card__value { font-size: 22px; }
+
+  .admin-filters .admin-select,
+  .admin-filters .admin-input {
+    flex: 1 1 100%;
+    max-width: none;
+  }
 
   .admin-login-card { padding: 28px; }
 
@@ -503,6 +531,7 @@ body {
      Add data-label="..." to each <td> matching its <th> text
      for the label to render correctly. */
   .admin-table-wrap { border: none; background: transparent; box-shadow: none; overflow: visible; }
+  .admin-table { min-width: 0; }
   .admin-table, .admin-table thead, .admin-table tbody, .admin-table tr, .admin-table td {
     display: block;
     width: 100%;
